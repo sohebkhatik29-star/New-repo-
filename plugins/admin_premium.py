@@ -332,9 +332,9 @@ async def prem_preview_plan_cb(client: Client, query: CallbackQuery):
     await query.answer()
 
 # =========================================================================
-# Admin Input Message Handler (Text & Photo Listeners with group=-6 priority)
+# Admin Input Message Handler (Text & Photo Listeners with group=-10 priority)
 # =========================================================================
-@Client.on_message(filters.private & ~filters.bot, group=-6)
+@Client.on_message(filters.private & ~filters.bot, group=-10)
 async def admin_premium_input_handler(client: Client, message: Message):
     if not message.from_user or not is_admin(message.from_user.id):
         message.continue_propagation()

@@ -922,6 +922,14 @@ async def verify_settings_interactive_listener(client: Client, message: Message)
         message.continue_propagation()
         return
 
+    try:
+        from plugins.admin_premium import ADMIN_PREM_STATE
+        if user_id in ADMIN_PREM_STATE or (await db.get_admin_prem_state(user_id)):
+            message.continue_propagation()
+            return
+    except Exception:
+        pass
+
     # Pass through standard menu commands so user can always open admin menu
     if message.text and message.text.startswith(("/", "!", ".")):
         cmd = message.text.split()[0].lower().lstrip("/!.")
