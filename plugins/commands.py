@@ -364,21 +364,21 @@ async def start(client, message):
                             n = await m.reply_photo(
                                 photo=photo_target,
                                 caption=formatted_msg,
-                                protect_content=True,
+                                protect_content=False,
                                 reply_markup=reply_markup,
                                 parse_mode=enums.ParseMode.HTML
                             )
                         except Exception:
                             n = await m.reply_text(
                                 text=formatted_msg,
-                                protect_content=True,
+                                protect_content=False,
                                 reply_markup=reply_markup,
                                 parse_mode=enums.ParseMode.HTML
                             )
                     else:
                         n = await m.reply_text(
                             text=formatted_msg,
-                            protect_content=True,
+                            protect_content=False,
                             reply_markup=reply_markup,
                             parse_mode=enums.ParseMode.HTML
                         )
