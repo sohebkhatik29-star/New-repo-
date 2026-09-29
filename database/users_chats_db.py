@@ -765,6 +765,53 @@ class Database:
     async def delete_dump_caption(self):
         await self.misc.delete_one({'_id': 'dump_custom_caption'})
 
+
+    async def get_premium_config(self):
+        doc = await self.misc.find_one({'_id': 'premium_config'})
+        if not doc:
+            return {
+                'is_enabled': False,
+                'plan_text': None,
+                'qr_code': None,
+                'upi_id': None,
+                'screenshot_user': 'Movies_1783'
+            }
+        return {
+            'is_enabled': doc.get('is_enabled', False),
+            'plan_text': doc.get('plan_text', None),
+            'qr_code': doc.get('qr_code', None),
+            'upi_id': doc.get('upi_id', None),
+            'screenshot_user': doc.get('screenshot_user', 'Movies_1783')
+        }
+
+    async def update_premium_config(self, key: str, value):
+        await self.misc.update_one(
+            {'_id': 'premium_config'},
+            {'': {key: value, 'updated_at': datetime.datetime.utcnow()}},
+            upsert=True
+        )
+
+    async def toggle_premium_mode(self):
+        cfg = await self.get_premium_config()
+        new_val = not cfg.get('is_enabled', False)
+        await self.update_premium_config('is_enabled', new_val)
+        return new_val
+
+    async def set_admin_prem_state(self, user_id: int, state_data: dict):
+        state_data['updated_at'] = datetime.datetime.utcnow()
+        await self.misc.update_one(
+            {'_id': f"prem_state_{int(user_id)}"},
+            {'': state_data},
+            upsert=True
+        )
+
+    async def get_admin_prem_state(self, user_id: int):
+        doc = await self.misc.find_one({'_id': f"prem_state_{int(user_id)}"})
+        return doc if doc else None
+
+    async def clear_admin_prem_state(self, user_id: int):
+        await self.misc.delete_one({'_id': f"prem_state_{int(user_id)}"})
+
 db = Database(DATABASE_URI, DATABASE_NAME)    
 db2 = Database(DATABASE_URI2, DATABASE_NAME)
 

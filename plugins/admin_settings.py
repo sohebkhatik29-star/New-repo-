@@ -42,6 +42,9 @@ def get_admin_panel_markup() -> InlineKeyboardMarkup:
             InlineKeyboardButton("📦 ᴍᴀɴᴀɢᴇ ᴅᴜᴍᴘ ꜱᴇᴛᴛɪɴɢꜱ", callback_data="dump_settings_panel")
         ],
         [
+            InlineKeyboardButton("💎 ᴘʀᴇᴍɪᴜᴍ ᴘʟᴀɴ ꜱᴇᴛᴛɪɴɢꜱ", callback_data="admin_premium_panel")
+        ],
+        [
             InlineKeyboardButton("📊 ʙᴏᴛ ꜱᴛᴀᴛɪꜱᴛɪᴄꜱ", callback_data="admin_stats")
         ],
         [

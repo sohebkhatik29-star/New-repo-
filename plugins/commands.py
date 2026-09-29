@@ -391,6 +391,43 @@ async def start(client, message):
                 print(f"Error In Verification - {e}")
                 pass
 
+        # Check if Global Premium Gate is ON
+        try:
+            prem_cfg = await db.get_premium_config()
+            if prem_cfg.get('is_enabled', False):
+                user_id_check = message.from_user.id if message.from_user else 0
+                is_user_admin = False
+                try:
+                    if int(user_id_check) in ADMINS or str(user_id_check) in [str(a) for a in ADMINS]:
+                        is_user_admin = True
+                except Exception:
+                    pass
+                
+                if not is_user_admin and not await db.has_premium_access(user_id_check):
+                    plan_caption = prem_cfg.get('plan_text') or script.BPREMIUM_TXT
+                    qr_media = prem_cfg.get('qr_code') or SUBSCRIPTION or "https://graph.org/file/86da2027469565b5873d6.jpg"
+                    screenshot_user = (prem_cfg.get('screenshot_user') or "Movies_1783").replace("@", "")
+                    owner_link = f"https://t.me/{screenshot_user}"
+                    
+                    btn = [
+                        [InlineKeyboardButton('📸 ꜱᴇɴᴅ ᴘᴀʏᴍᴇɴᴛ ꜱᴄʀᴇᴇɴꜱʜᴏᴛ', url=owner_link)],
+                        [InlineKeyboardButton('💎 ᴜɴʟᴏᴄᴋ ᴘʀᴇᴍɪᴜᴍ ᴘʟᴀɴꜱ', callback_data='buy_info')],
+                        [InlineKeyboardButton('🎁 ɢᴇᴛ ꜰʀᴇᴇ ᴛʀɪᴀʟ', callback_data='give_trial')]
+                    ]
+                    if sticker:
+                        try:
+                            await sticker.delete()
+                        except Exception:
+                            pass
+                    return await message.reply_photo(
+                        photo=qr_media,
+                        caption=f"🔒 <b><u>PREMIUM PLAN REQUIRED TO DOWNLOAD</u></b>\n\n{plan_caption}\n\n<i>⚠️ Please buy premium to download files instantly.</i>",
+                        reply_markup=InlineKeyboardMarkup(btn),
+                        parse_mode=enums.ParseMode.HTML
+                    )
+        except Exception as err:
+            logger.error(f'Premium gate error: {err}')
+
         # Now, await the file details task
         files_ = await file_details_task
 

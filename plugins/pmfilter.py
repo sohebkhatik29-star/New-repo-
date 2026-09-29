@@ -1631,7 +1631,15 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data == "premium_info":
         try:
+            prem_cfg = await db.get_premium_config()
+            plan_caption = prem_cfg.get("plan_text") or script.BPREMIUM_TXT
+            qr_media = prem_cfg.get("qr_code") or SUBSCRIPTION
+            screenshot_user = (prem_cfg.get("screenshot_user") or "Movies_1783").replace("@", "")
+            owner_link = f"https://t.me/{screenshot_user}"
+            
             btn = [[
+                InlineKeyboardButton('📸 ꜱᴇɴᴅ ᴘᴀʏᴍᴇɴᴛ ꜱᴄʀᴇᴇɴꜱʜᴏᴛ', url=owner_link)
+            ],[
                 InlineKeyboardButton('• ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ •', callback_data='buy_info'),
             ],[
                 InlineKeyboardButton('• ʀᴇꜰᴇʀ ꜰʀɪᴇɴᴅꜱ', callback_data='reffff'),
@@ -1643,7 +1651,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             await client.edit_message_media(
                 chat_id=query.message.chat.id,
                 message_id=query.message.id,
-                media=InputMediaPhoto(media=SUBSCRIPTION, caption=script.BPREMIUM_TXT, parse_mode=enums.ParseMode.HTML),
+                media=InputMediaPhoto(media=qr_media, caption=plan_caption, parse_mode=enums.ParseMode.HTML),
                 reply_markup=reply_markup
             )
         except Exception as e:
@@ -1670,16 +1678,22 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data == "upi_info":
         try:
+            prem_cfg = await db.get_premium_config()
+            upi_id = prem_cfg.get("upi_id") or OWNER_UPI_ID
+            qr_media = prem_cfg.get("qr_code") or QR_CODE or SUBSCRIPTION
+            screenshot_user = (prem_cfg.get("screenshot_user") or "Movies_1783").replace("@", "")
+            owner_link = f"https://t.me/{screenshot_user}"
+            
             btn = [[
-                InlineKeyboardButton('• ꜱᴇɴᴅ  ᴘᴀʏᴍᴇɴᴛ ꜱᴄʀᴇᴇɴꜱʜᴏᴛ •', url=OWNER_LNK),
+                InlineKeyboardButton('📸 ꜱᴇɴᴅ ᴘᴀʏᴍᴇɴᴛ ꜱᴄʀᴇᴇɴꜱʜᴏᴛ', url=owner_link),
             ],[
-                InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data='buy_info')
+                InlineKeyboardButton('⇋ ʙᴀᴄᴋ ᴛᴏ ᴘʀᴇᴍɪᴜᴍ ⇋', callback_data='premium_info')
             ]]
             reply_markup = InlineKeyboardMarkup(btn)
             await client.edit_message_media(
                 chat_id=query.message.chat.id,
                 message_id=query.message.id,
-                media=InputMediaPhoto(media=SUBSCRIPTION, caption=script.PREMIUM_UPI_TEXT.format(OWNER_UPI_ID), parse_mode=enums.ParseMode.HTML),
+                media=InputMediaPhoto(media=qr_media, caption=script.PREMIUM_UPI_TEXT.format(upi_id), parse_mode=enums.ParseMode.HTML),
                 reply_markup=reply_markup
             )
         except Exception as e:
