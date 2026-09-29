@@ -934,10 +934,8 @@ async def verify_settings_interactive_listener(client: Client, message: Message)
     if message.text and message.text.startswith(("/", "!", ".")):
         return
 
-    # 1. Fetch state from memory or MongoDB
+    # 1. Fetch state from memory
     state = AWAITING_INPUT.get(user_id)
-    if not state:
-        state = await db.get_admin_verify_state(user_id)
 
     raw_text = (message.text or "").strip()
     parts = raw_text.split()

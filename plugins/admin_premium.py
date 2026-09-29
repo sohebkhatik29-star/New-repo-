@@ -342,8 +342,6 @@ async def admin_premium_input_handler(client: Client, message: Message):
     
     user_id = message.from_user.id
     state = ADMIN_PREM_STATE.get(user_id)
-    if not state:
-        state = await db.get_admin_prem_state(user_id)
     
     if not state:
         return
