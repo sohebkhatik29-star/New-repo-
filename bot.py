@@ -111,6 +111,12 @@ async def dreamxbotz_start():
     temp.B_NAME = me.first_name
     temp.B_LINK = me.mention
     dreamxbotz.username = '@' + me.username
+    try:
+        from pyrogram.types import MenuButtonCommands
+        await dreamxbotz.set_chat_menu_button(menu_button=MenuButtonCommands())
+    except Exception as e:
+        logging.warning(f"Could not reset menu button: {e}")
+
     dreamxbotz.loop.create_task(check_expired_premium(dreamxbotz))
     logging.info(f"{me.first_name} with Pyrogram v{__version__} (Layer {layer}) started on {me.username}.")
     logging.info(LOG_STR)

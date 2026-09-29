@@ -2048,9 +2048,11 @@ async def auto_filter(client, msg, spoll=False):
 
 async def ai_spell_check(chat_id, wrong_name):
     async def search_movie(wrong_name):
-        search_results = imdb.search_movie(wrong_name)
-        movie_list = [movie['title'] for movie in search_results]
-        return movie_list
+        try:
+            search_results = await asyncio.wait_for(asyncio.to_thread(imdb.search_movie, wrong_name), timeout=1.2)
+            return [movie['title'] for movie in search_results] if search_results else []
+        except Exception:
+            return []
     movie_list = await search_movie(wrong_name)
     if not movie_list:
         return
@@ -2074,9 +2076,9 @@ async def advantage_spell_chok(client, message):
 
     movies = None
     try:
-        movies = await get_poster(search, bulk=True)
-    except Exception as e:
-        logger.exception("get_poster failed for query=%s: %s", search, e)
+        movies = await asyncio.wait_for(get_poster(search, bulk=True), timeout=1.5)
+    except Exception:
+        movies = None
 
     button = [
         [InlineKeyboardButton("👑 ʀᴇǫᴜᴇsᴛ ᴛᴏ ᴏᴡɴᴇʀ 👑", url=OWNER_LNK)],
