@@ -859,7 +859,7 @@ async def cancel_input_cmd(client: Client, message: Message):
         )
         message.stop_propagation()
     else:
-        message.continue_propagation()
+        return
 
 
 # =========================================================================
@@ -919,23 +919,20 @@ async def handle_direct_shortner_cmd(client: Client, message: Message, step: int
 async def verify_settings_interactive_listener(client: Client, message: Message):
     user_id = message.from_user.id if message.from_user else None
     if not user_id or not is_admin(user_id):
-        message.continue_propagation()
+        return
         return
 
     try:
         from plugins.admin_premium import ADMIN_PREM_STATE
         if user_id in ADMIN_PREM_STATE or (await db.get_admin_prem_state(user_id)):
-            message.continue_propagation()
+            return
             return
     except Exception:
         pass
 
-    # Pass through standard menu commands so user can always open admin menu
+    # Pass through ALL commands so standard commands always execute normally
     if message.text and message.text.startswith(("/", "!", ".")):
-        cmd = message.text.split()[0].lower().lstrip("/!.")
-        if cmd in ["start", "admin", "adminpanel", "settings", "cancel", "set_shortner", "set_shortener", "setshortlink", "set_shortner_1", "set_shortner_2", "set_shortner_3", "set_shortener_1", "set_shortener_2", "set_shortener_3"]:
-            message.continue_propagation()
-            return
+        return
 
     # 1. Fetch state from memory or MongoDB
     state = AWAITING_INPUT.get(user_id)
@@ -964,7 +961,7 @@ async def verify_settings_interactive_listener(client: Client, message: Message)
         return
 
     if not state:
-        message.continue_propagation()
+        return
         return
 
     flow_type = state.get("type", "")

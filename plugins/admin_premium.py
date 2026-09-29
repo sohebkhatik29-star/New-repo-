@@ -1,11 +1,10 @@
 import logging
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     CallbackQuery,
-    Message,
-    InputMediaPhoto
+    Message
 )
 from database.users_chats_db import db
 from info import ADMINS, INITIAL_ADMINS, QR_CODE, OWNER_UPI_ID, SUBSCRIPTION
@@ -13,7 +12,7 @@ from Script import script
 
 logger = logging.getLogger(__name__)
 
-# In-memory fast state tracking
+# Fast In-memory state tracking
 ADMIN_PREM_STATE = {}
 
 def is_admin(user_id: int) -> bool:
@@ -201,7 +200,7 @@ async def prem_set_upi_cb(client: Client, query: CallbackQuery):
     
     prompt = (
         "💳 <b><u>Set Payment UPI ID</u></b>\n\n"
-        "Please send the new <b>UPI ID</b> now (e.g. <code>delhisehoon1782@ptyes</code> or <code>yourname@paytm</code>).\n\n"
+        "Please send the new <b>UPI ID</b> now (e.g. <code>delhisehoon1782@ptyes</code>).\n\n"
         "<i>Click Cancel below to abort.</i>"
     )
     cancel_markup = InlineKeyboardMarkup([
@@ -285,7 +284,7 @@ async def prem_preview_plan_cb(client: Client, query: CallbackQuery):
         return await query.answer("⛔️ Access Denied!", show_alert=True)
     
     cfg = await db.get_premium_config()
-    upi_id = cfg.get("upi_id") or OWNER_UPI_ID or "sohebkhatik137@oksbi"
+    upi_id = cfg.get("upi_id") or OWNER_UPI_ID or "delhisehoon1782@ptyes"
     owner_user = (cfg.get("screenshot_user") or "Movies_1783").replace("@", "").strip()
     qr_media = cfg.get("qr_code") or QR_CODE or SUBSCRIPTION
     
@@ -321,23 +320,24 @@ async def prem_preview_plan_cb(client: Client, query: CallbackQuery):
             chat_id=query.message.chat.id,
             photo=qr_media,
             caption=caption,
+            protect_content=False,
             reply_markup=preview_markup
         )
     except Exception:
         await client.send_message(
             chat_id=query.message.chat.id,
             text=caption,
+            protect_content=False,
             reply_markup=preview_markup
         )
     await query.answer()
 
 # =========================================================================
-# Admin Input Message Handler (Text & Photo Listeners with group=-10 priority)
+# Admin Input Message Handler (Text & Photo Listeners with group=-2)
 # =========================================================================
-@Client.on_message(filters.private & ~filters.bot, group=-10)
+@Client.on_message(filters.private & ~filters.bot & ~filters.regex(r"^[/\!.]"), group=-2)
 async def admin_premium_input_handler(client: Client, message: Message):
     if not message.from_user or not is_admin(message.from_user.id):
-        message.continue_propagation()
         return
     
     user_id = message.from_user.id
@@ -346,7 +346,6 @@ async def admin_premium_input_handler(client: Client, message: Message):
         state = await db.get_admin_prem_state(user_id)
     
     if not state:
-        message.continue_propagation()
         return
     
     step = state.get("step")
@@ -483,5 +482,3 @@ async def admin_premium_input_handler(client: Client, message: Message):
             reply_markup=markup
         )
         return
-    
-    message.continue_propagation()
