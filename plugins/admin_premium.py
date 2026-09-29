@@ -13,6 +13,9 @@ from Script import script
 
 logger = logging.getLogger(__name__)
 
+# In-memory fast state tracking
+ADMIN_PREM_STATE = {}
+
 def is_admin(user_id: int) -> bool:
     try:
         uid = int(user_id)
@@ -82,6 +85,7 @@ async def admin_premium_panel_cb(client: Client, query: CallbackQuery):
     if not is_admin(query.from_user.id):
         return await query.answer("⛔️ Access Denied!", show_alert=True)
     
+    ADMIN_PREM_STATE.pop(query.from_user.id, None)
     await db.clear_admin_prem_state(query.from_user.id)
     cfg = await db.get_premium_config()
     text = await build_premium_panel_text(cfg)
@@ -148,10 +152,12 @@ async def prem_set_text_cb(client: Client, query: CallbackQuery):
         pass
     
     sent = await client.send_message(query.message.chat.id, prompt, reply_markup=cancel_markup)
-    await db.set_admin_prem_state(query.from_user.id, {
+    state_data = {
         "step": "WAITING_PREM_TEXT",
         "prompt_msg_id": sent.id
-    })
+    }
+    ADMIN_PREM_STATE[query.from_user.id] = state_data
+    await db.set_admin_prem_state(query.from_user.id, state_data)
     await query.answer()
 
 # =========================================================================
@@ -177,10 +183,12 @@ async def prem_set_qr_cb(client: Client, query: CallbackQuery):
         pass
     
     sent = await client.send_message(query.message.chat.id, prompt, reply_markup=cancel_markup)
-    await db.set_admin_prem_state(query.from_user.id, {
+    state_data = {
         "step": "WAITING_PREM_QR",
         "prompt_msg_id": sent.id
-    })
+    }
+    ADMIN_PREM_STATE[query.from_user.id] = state_data
+    await db.set_admin_prem_state(query.from_user.id, state_data)
     await query.answer()
 
 # =========================================================================
@@ -193,7 +201,7 @@ async def prem_set_upi_cb(client: Client, query: CallbackQuery):
     
     prompt = (
         "💳 <b><u>Set Payment UPI ID</u></b>\n\n"
-        "Please send the new <b>UPI ID</b> now (e.g. <code>sohebkhatik137@oksbi</code> or <code>yourname@paytm</code>).\n\n"
+        "Please send the new <b>UPI ID</b> now (e.g. <code>delhisehoon1782@ptyes</code> or <code>yourname@paytm</code>).\n\n"
         "<i>Click Cancel below to abort.</i>"
     )
     cancel_markup = InlineKeyboardMarkup([
@@ -206,10 +214,12 @@ async def prem_set_upi_cb(client: Client, query: CallbackQuery):
         pass
     
     sent = await client.send_message(query.message.chat.id, prompt, reply_markup=cancel_markup)
-    await db.set_admin_prem_state(query.from_user.id, {
+    state_data = {
         "step": "WAITING_PREM_UPI",
         "prompt_msg_id": sent.id
-    })
+    }
+    ADMIN_PREM_STATE[query.from_user.id] = state_data
+    await db.set_admin_prem_state(query.from_user.id, state_data)
     await query.answer()
 
 # =========================================================================
@@ -236,10 +246,12 @@ async def prem_set_owner_cb(client: Client, query: CallbackQuery):
         pass
     
     sent = await client.send_message(query.message.chat.id, prompt, reply_markup=cancel_markup)
-    await db.set_admin_prem_state(query.from_user.id, {
+    state_data = {
         "step": "WAITING_PREM_OWNER",
         "prompt_msg_id": sent.id
-    })
+    }
+    ADMIN_PREM_STATE[query.from_user.id] = state_data
+    await db.set_admin_prem_state(query.from_user.id, state_data)
     await query.answer()
 
 # =========================================================================
@@ -250,6 +262,7 @@ async def prem_cancel_cb(client: Client, query: CallbackQuery):
     if not is_admin(query.from_user.id):
         return await query.answer("⛔️ Access Denied!", show_alert=True)
     
+    ADMIN_PREM_STATE.pop(query.from_user.id, None)
     await db.clear_admin_prem_state(query.from_user.id)
     cfg = await db.get_premium_config()
     text = await build_premium_panel_text(cfg)
@@ -319,15 +332,21 @@ async def prem_preview_plan_cb(client: Client, query: CallbackQuery):
     await query.answer()
 
 # =========================================================================
-# Admin Input Message Handler (Text & Photo Listeners)
+# Admin Input Message Handler (Text & Photo Listeners with group=-6 priority)
 # =========================================================================
-@Client.on_message(filters.private & (filters.text | filters.photo) & ~filters.command(["start", "admin", "adminpanel", "settings", "cancel"]))
+@Client.on_message(filters.private & ~filters.bot, group=-6)
 async def admin_premium_input_handler(client: Client, message: Message):
-    if not is_admin(message.from_user.id):
+    if not message.from_user or not is_admin(message.from_user.id):
+        message.continue_propagation()
         return
     
-    state = await db.get_admin_prem_state(message.from_user.id)
+    user_id = message.from_user.id
+    state = ADMIN_PREM_STATE.get(user_id)
     if not state:
+        state = await db.get_admin_prem_state(user_id)
+    
+    if not state:
+        message.continue_propagation()
         return
     
     step = state.get("step")
@@ -335,12 +354,14 @@ async def admin_premium_input_handler(client: Client, message: Message):
     
     # 1. SET PREMIUM TEXT
     if step == "WAITING_PREM_TEXT":
+        message.stop_propagation()
         if not message.text:
             return await message.reply_text("❌ Please send a valid text message for the premium plan.")
         
         new_text = message.text.html if hasattr(message.text, 'html') else message.text
         await db.update_premium_config("plan_text", new_text)
-        await db.clear_admin_prem_state(message.from_user.id)
+        ADMIN_PREM_STATE.pop(user_id, None)
+        await db.clear_admin_prem_state(user_id)
         
         try:
             await message.delete()
@@ -365,6 +386,7 @@ async def admin_premium_input_handler(client: Client, message: Message):
     
     # 2. SET QR CODE PHOTO
     if step == "WAITING_PREM_QR":
+        message.stop_propagation()
         qr_val = None
         if message.photo:
             qr_val = message.photo.file_id
@@ -374,7 +396,8 @@ async def admin_premium_input_handler(client: Client, message: Message):
             return await message.reply_text("❌ Please send a photo or a valid image URL (e.g. Telegraph/Catbox).")
         
         await db.update_premium_config("qr_code", qr_val)
-        await db.clear_admin_prem_state(message.from_user.id)
+        ADMIN_PREM_STATE.pop(user_id, None)
+        await db.clear_admin_prem_state(user_id)
         
         try:
             await message.delete()
@@ -399,12 +422,14 @@ async def admin_premium_input_handler(client: Client, message: Message):
     
     # 3. SET UPI ID
     if step == "WAITING_PREM_UPI":
+        message.stop_propagation()
         if not message.text:
-            return await message.reply_text("❌ Please send a valid UPI ID (e.g. <code>sohebkhatik137@oksbi</code>).")
+            return await message.reply_text("❌ Please send a valid UPI ID (e.g. <code>delhisehoon1782@ptyes</code>).")
         
         upi_clean = message.text.strip()
         await db.update_premium_config("upi_id", upi_clean)
-        await db.clear_admin_prem_state(message.from_user.id)
+        ADMIN_PREM_STATE.pop(user_id, None)
+        await db.clear_admin_prem_state(user_id)
         
         try:
             await message.delete()
@@ -429,12 +454,14 @@ async def admin_premium_input_handler(client: Client, message: Message):
     
     # 4. SET SCREENSHOT OWNER USERNAME
     if step == "WAITING_PREM_OWNER":
+        message.stop_propagation()
         if not message.text:
             return await message.reply_text("❌ Please send a valid Telegram username (e.g. <code>Movies_1783</code>).")
         
         raw_user = message.text.strip().replace("https://t.me/", "").replace("http://t.me/", "").replace("@", "").replace("/", "")
         await db.update_premium_config("screenshot_user", raw_user)
-        await db.clear_admin_prem_state(message.from_user.id)
+        ADMIN_PREM_STATE.pop(user_id, None)
+        await db.clear_admin_prem_state(user_id)
         
         try:
             await message.delete()
@@ -456,3 +483,5 @@ async def admin_premium_input_handler(client: Client, message: Message):
             reply_markup=markup
         )
         return
+    
+    message.continue_propagation()

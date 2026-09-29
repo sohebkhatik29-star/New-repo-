@@ -99,6 +99,12 @@ async def pm_text(bot, message):
             return
     except Exception:
         pass
+    try:
+        from plugins.admin_premium import ADMIN_PREM_STATE
+        if user_id in ADMIN_PREM_STATE or (await db.get_admin_prem_state(user_id)):
+            return
+    except Exception:
+        pass
     if EMOJI_MODE:
         try:
             await message.react(emoji=random.choice(REACTIONS), big=True)
