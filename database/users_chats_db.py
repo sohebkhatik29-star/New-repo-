@@ -768,20 +768,35 @@ class Database:
 
     async def get_premium_config(self):
         doc = await self.misc.find_one({'_id': 'premium_config'})
+        default_text = """<blockquote>🎖️ <b>ᴀᴠᴀɪʟᴀʙʟᴇ ᴘʟᴀɴꜱ</b></blockquote>
+
+◉ 15 ᴅᴀʏꜱ - 50 ₹  / 20 ꜱᴛᴀʀ
+◉ 30 ᴅᴀʏꜱ - 70 ₹  / 40 ꜱᴛᴀʀ
+◉ 45 ᴅᴀʏꜱ - 110 ₹  / 55 ꜱᴛᴀʀ
+◉ 60 ᴅᴀʏꜱ - 140 ₹  / 75 ꜱᴛᴀʀ
+
+•─────•─────────•─────•
+<blockquote>📸 <b><u>SUBSCRIPTION PROOF</u></b> :</blockquote>
+
+‼️ <b>MUST SEND SCREENSHOT AFTER PAYMENT.</b>
+‼️ <b>AFTER SENDING SCREENSHOT GIVE US SOMETIME TO ADD YOU IN PREMIUM LIST.</b>"""
+        default_qr = "https://api.qrserver.com/v1/create-qr-code/?size=800x800&data=upi%3A%2F%2Fpay%3Fpa%3Ddelhisehoon1782%40ptyes%26pn%3DMovies1782%26cu%3DINR"
+        default_upi = "delhisehoon1782@ptyes"
+        default_owner = "Movies_1783"
         if not doc:
             return {
                 'is_enabled': False,
-                'plan_text': None,
-                'qr_code': None,
-                'upi_id': None,
-                'screenshot_user': 'Movies_1783'
+                'plan_text': default_text,
+                'qr_code': default_qr,
+                'upi_id': default_upi,
+                'screenshot_user': default_owner
             }
         return {
             'is_enabled': doc.get('is_enabled', False),
-            'plan_text': doc.get('plan_text', None),
-            'qr_code': doc.get('qr_code', None),
-            'upi_id': doc.get('upi_id', None),
-            'screenshot_user': doc.get('screenshot_user', 'Movies_1783')
+            'plan_text': doc.get('plan_text') or default_text,
+            'qr_code': doc.get('qr_code') or default_qr,
+            'upi_id': doc.get('upi_id') or default_upi,
+            'screenshot_user': doc.get('screenshot_user') or default_owner
         }
 
     async def update_premium_config(self, key: str, value):
