@@ -75,12 +75,16 @@ async def give_filter(client, message):
         )
 
 
-@Client.on_message(filters.private & filters.text & filters.incoming & ~filters.regex(r"^/") & ~filters.regex(r"(https?://)?(t\.me|telegram\.me|telegram\.dog)/"))
+@Client.on_message(filters.private & filters.text & filters.incoming & ~filters.regex(r"^[/\!.]") & ~filters.regex(r"(https?://)?(t\.me|telegram\.me|telegram\.dog)/"))
 async def pm_text(bot, message):
-    bot_id = bot.me.id
-    content = message.text
-    user = message.from_user.first_name
+    if not message or not message.from_user or not message.text:
+        return
+    
     user_id = message.from_user.id
+    content = message.text.strip()
+    user = message.from_user.first_name or "User"
+
+    # 1. Admin state filters (in-memory only)
     try:
         from plugins.admin_verify import AWAITING_INPUT as V_AWAITING
         if user_id in V_AWAITING:
@@ -111,39 +115,55 @@ async def pm_text(bot, message):
             return
     except Exception:
         pass
+
+    # 2. Ignore commands or hashtags
+    if content.startswith(("/", "!", ".", "#")):
+        return
+
+    # 3. Optional Emoji Reaction
     if EMOJI_MODE:
         try:
             await message.react(emoji=random.choice(REACTIONS), big=True)
         except Exception:
-            await message.react(emoji="⚡️")
-            pass
-    if content.startswith(("#")):
-        return
+            try:
+                await message.react(emoji="⚡️")
+            except Exception:
+                pass
+
+    # 4. Update top messages stats
     try:
         await mdb.update_top_messages(user_id, content)
-        pm_search = await db.pm_search_status(bot_id)
+    except Exception:
+        pass
+
+    # 5. Execute Auto Filter Search
+    try:
+        bot_id = getattr(getattr(bot, "me", None), "id", None) or temp.ME
+        pm_search = True
+        if bot_id:
+            try:
+                pm_search = await db.pm_search_status(bot_id)
+            except Exception:
+                pm_search = True
+
         if pm_search:
             await auto_filter(bot, message)
         else:
+            notice_text = f"<b>🙋 ʜᴇʏ {user} 😍 ,</b>\n\n𝒀𝒐𝒖 𝒄𝒂𝒏 𝒔𝒆𝒂𝒓𝒄𝒉 𝒇𝒐𝒓 𝒎𝒐𝒗𝒊𝒆𝒔 𝒐𝒏𝒍𝒚 𝒐𝒏 𝒐𝒖𝒓 𝑴𝒐𝒗𝒊𝒆 𝑮𝒓𝒐𝒖𝒑. 𝒀𝒐𝒖 𝒂𝒓𝒆 𝒏𝒐𝒕 𝒂𝒍𝒍𝒐𝒘𝒆𝒅 𝒕𝒐 𝒔𝒆𝒂𝒓𝒄𝒉 𝒇𝒐𝒓 𝒎𝒐𝒗𝒊𝒆𝒔 𝒐𝒏 𝑫𝒊𝒓ᴇ𝒄𝒕 𝑩𝒐𝒕. 𝑷𝒍𝒆𝒂𝒔𝒆 𝒋𝒐𝒊𝒏 𝒐𝒖𝒓 𝒎𝒐𝒗𝒊𝒆 𝒈𝒓𝒐𝒖𝒑 𝒃𝒚 𝒄𝒍𝒊𝒄𝒌𝒊𝒏𝒈 𝒐𝒏 𝒕𝒉𝒆  𝑹𝑬𝑸𝑼𝑬𝑺𝑻 𝑯𝑬𝑹𝑬 𝒃𝒖𝒕𝒕𝒐𝒏 𝒈𝒊𝒗𝒆𝒏 𝒃𝒆𝒍𝒐𝒘 𝒂𝒏𝒅 𝒔𝒆𝒂𝒓𝒄𝒉 𝒚𝒐𝒖𝒓 𝒇𝒂𝒗𝒐𝒓𝒊𝒕𝒆 𝒎𝒐𝒗𝒊𝒆 𝒕𝒉𝒆𝒓𝒆 👇\n\n<blockquote>आप केवल हमारे 𝑴𝒐𝒗𝒊𝒆 𝑮𝒓𝒐𝒖𝒑 पर ही 𝑴𝒐𝒗𝒊𝒆 𝑺𝒆𝒂𝒓𝒄𝒉 कर सकते हो । आपको 𝑫𝒊𝒓𝒆𝒄𝒕 𝑩𝒐𝒕 पर 𝑴𝒐𝒗𝒊𝒆 𝑺𝒆𝒂𝒓𝒄𝒉 करने की 𝑷𝒆𝒓𝒎𝒊𝒔𝒔𝒊𝒐𝒏 नहीं है कृपया नीचे दिए गए 𝑹𝑬𝑸𝑼𝑬𝑺𝑻 𝑯𝑬𝑹𝑬 वाले 𝑩𝒖𝒕𝒕𝒐𝒏 पर क्लिक करके हमारे 𝑴𝒐𝒗𝒊𝒆 𝑮𝒓𝒐𝒖𝒑 को 𝑱𝒐𝒊𝒏 करें और वहां पर अपनी मनपसंद 𝑴𝒐𝒗𝒊𝒆 𝑺𝒆𝒂𝒓𝒄𝒉 सर्च करें ।</blockquote>"
             await message.reply_text(
-                text=(
-                    f"<b>🙋 ʜᴇʏ {user} 😍 ,\n\n"
-                    "𝒀𝒐𝒖 𝒄𝒂𝒏 𝒔𝒆𝒂𝒓𝒄𝒉 𝒇𝒐𝒓 𝒎𝒐𝒗𝒊𝒆𝒔 𝒐𝒏𝒍𝒚 𝒐𝒏 𝒐𝒖𝒓 𝑴𝒐𝒗𝒊𝒆 𝑮𝒓𝒐𝒖𝒑. 𝒀𝒐𝒖 𝒂𝒓𝒆 𝒏𝒐𝒕 𝒂𝒍𝒍𝒐𝒘𝒆𝒅 𝒕𝒐 𝒔𝒆𝒂𝒓𝒄𝒉 𝒇𝒐𝒓 𝒎𝒐𝒗𝒊𝒆𝒔 𝒐𝒏 𝑫𝒊𝒓𝒆𝒄𝒕 𝑩𝒐𝒕. 𝑷𝒍𝒆𝒂𝒔𝒆 𝒋𝒐𝒊𝒏 𝒐𝒖𝒓 𝒎𝒐𝒗𝒊𝒆 𝒈𝒓𝒐𝒖𝒑 𝒃𝒚 𝒄𝒍𝒊𝒄𝒌𝒊𝒏𝒈 𝒐𝒏 𝒕𝒉𝒆  𝑹𝑬𝑸𝑼𝑬𝑺𝑻 𝑯𝑬𝑹𝑬 𝒃𝒖𝒕𝒕𝒐𝒏 𝒈𝒊𝒗𝒆𝒏 𝒃𝒆𝒍𝒐𝒘 𝒂𝒏𝒅 𝒔𝒆𝒂𝒓𝒄𝒉 𝒚𝒐𝒖𝒓 𝒇𝒂𝒗𝒐𝒓𝒊𝒕𝒆 𝒎𝒐𝒗𝒊𝒆 𝒕𝒉𝒆𝒓𝒆 👇\n\n"
-                    "<blockquote>"
-                    "आप केवल हमारे 𝑴𝒐𝒗𝒊𝒆 𝑮𝒓𝒐𝒖𝒑 पर ही 𝑴𝒐𝒗𝒊𝒆 𝑺𝒆𝒂𝒓𝒄𝒉 कर सकते हो । "
-                    "आपको 𝑫𝒊𝒓𝒆𝒄𝒕 𝑩𝒐𝒕 पर 𝑴𝒐𝒗𝒊𝒆 𝑺𝒆𝒂𝒓𝒄𝒉 करने की 𝑷𝒆𝒓𝒎𝒊𝒔𝒔𝒊𝒐𝒏 नहीं है कृपया नीचे दिए गए 𝑹𝑬𝑸𝑼𝑬𝑺𝑻 𝑯𝑬𝑹𝑬 वाले 𝑩𝒖𝒕𝒕𝒐𝒏 पर क्लिक करके हमारे 𝑴𝒐𝒗𝒊𝒆 𝑮𝒓𝒐𝒖𝒑 को 𝑱𝒐𝒊𝒏 करें और वहां पर अपनी मनपसंद 𝑴𝒐𝒗𝒊𝒆 𝑺𝒆𝒂𝒓𝒄𝒉 सर्च करें ।"
-                    "</blockquote></b>"
-                ), reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📝 ʀᴇǫᴜᴇsᴛ ʜᴇʀᴇ ", url=GRP_LNK)]]))
-            await bot.send_message(chat_id=LOG_CHANNEL,
-                                   text=(
-                                       f"<b>#𝐏𝐌_𝐌𝐒𝐆\n\n"
-                                       f"👤 Nᴀᴍᴇ : {user}\n"
-                                       f"🆔 ID : {user_id}\n"
-                                       f"💬 Mᴇssᴀɢᴇ : {content}</b>"
-                                   )
-                                   )
-    except Exception:
-        pass
+                text=notice_text,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📝 ʀᴇǫᴜᴇsᴛ ʜᴇʀᴇ ", url=GRP_LNK)]])
+            )
+            if LOG_CHANNEL:
+                try:
+                    await bot.send_message(
+                        chat_id=LOG_CHANNEL,
+                        text=f"#𝐏𝐌_𝐌𝐒𝐆\n\n👤 Nᴀᴍᴇ : {user}\n🆔 ID : {user_id}\n💬 Mᴇssᴀɢᴇ : {content}"
+                    )
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.exception("Error executing auto_filter in pm_text: %s", e)
 
 
 @Client.on_callback_query(filters.regex(r"^reffff"))
