@@ -1,4 +1,4 @@
-from utils import get_random_mix_id, get_size, is_subscribed, is_req_subscribed, group_setting_buttons, get_poster, get_posterx, temp, get_settings, save_group_settings, get_cap, imdb, is_check_admin, extract_request_content, log_error, clean_filename, generate_season_variations, clean_search_text, get_all_fsub_channels_list, get_start_display_details
+from utils import get_random_mix_id, get_size, is_subscribed, is_req_subscribed, group_setting_buttons, get_poster, get_posterx, temp, get_settings, save_group_settings, get_cap, imdb, is_check_admin, extract_request_content, log_error, clean_filename, generate_season_variations, clean_search_text, get_all_fsub_channels_list, get_start_display_details, get_time
 import tracemalloc
 from fuzzywuzzy import process
 from dreamxbotz.util.file_properties import get_name, get_hash
@@ -945,6 +945,61 @@ async def cb_handler(client: Client, query: CallbackQuery):
         user = query.message.reply_to_message.from_user.id if query.message.reply_to_message else query.from_user.id
         if int(user) != 0 and query.from_user.id != int(user):
             return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
+        
+        # If already in private chat, send file directly (fixes click not working / deep-link issues)
+        if query.message.chat.type == enums.ChatType.PRIVATE:
+            try:
+                files_ = await get_file_details(file_id)
+                if not files_:
+                    return await query.answer("ɴᴏ ꜱᴜᴄʜ ꜰɪʟᴇ ᴇxɪꜱᴛꜱ !", show_alert=True)
+                files = files_[0]
+                title = clean_filename(files.file_name)
+                size = get_size(files.file_size)
+                f_caption = files.caption
+                settings = await get_settings(query.message.chat.id)
+                DREAMX_CAPTION = settings.get('caption', CUSTOM_FILE_CAPTION) if settings else CUSTOM_FILE_CAPTION
+                if DREAMX_CAPTION:
+                    try:
+                        f_caption = DREAMX_CAPTION.format(
+                            file_name='' if title is None else title,
+                            file_size='' if size is None else size,
+                            file_caption='' if f_caption is None else f_caption
+                        )
+                    except Exception:
+                        f_caption = title or files.file_name
+                if f_caption is None:
+                    f_caption = title or files.file_name
+                cover = getattr(files, 'cover', None)
+                # Simple buttons to avoid circular import with commands.py
+                btn = [[InlineKeyboardButton('📌 ᴊᴏɪɴ ᴜᴘᴅᴀᴛᴇꜱ ᴄʜᴀɴɴᴇʟ 📌', url=UPDATE_CHNL_LNK)]]
+                protect = settings.get('file_secure', PROTECT_CONTENT) if settings else PROTECT_CONTENT
+                await query.answer()
+                send_kwargs = {
+                    "chat_id": query.from_user.id,
+                    "file_id": file_id,
+                    "caption": f_caption,
+                    "protect_content": protect,
+                    "reply_markup": InlineKeyboardMarkup(btn)
+                }
+                if cover:
+                    send_kwargs["cover"] = cover
+                msg = await client.send_cached_media(**send_kwargs)
+                # Optional auto-delete
+                try:
+                    if settings and settings.get('auto_delete'):
+                        k = await msg.reply(script.DEL_MSG.format(get_time(DELETE_TIME)), quote=True, parse_mode=enums.ParseMode.HTML)
+                        await asyncio.sleep(DELETE_TIME)
+                        await msg.delete()
+                        await k.edit_text("<b>ʏᴏᴜʀ ᴠɪᴅᴇᴏ / ꜰɪʟᴇ ɪꜱ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ !!</b>")
+                except Exception:
+                    pass
+                return
+            except Exception as e:
+                logger.exception(e)
+                await query.answer("Error sending file. Try again.", show_alert=True)
+                return
+        
+        # For groups: use deep link to open bot PM
         await query.answer(url=f"https://t.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file_id}")
 
     elif query.data.startswith("sendfiles"):
