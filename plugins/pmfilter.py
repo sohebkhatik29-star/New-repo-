@@ -75,83 +75,75 @@ async def give_filter(client, message):
         )
 
 
-@Client.on_message(filters.private & filters.text & filters.incoming)
+@Client.on_message(filters.private & filters.text & filters.incoming, group=2)
 async def pm_text(bot, message):
+    """Handle movie search in private chat (PM)."""
     if not message or not message.from_user or not message.text:
         return
-    
-    user_id = message.from_user.id
-    content = (message.text or "").strip()
 
-    # Ignore commands
-    if content.startswith(("/", "!", ".")):
+    content = (message.text or "").strip()
+    if not content or content.startswith(("/", "!", ".")):
         return
 
-    # Admin input states - skip search when admin is typing for a panel
+    user_id = message.from_user.id
+
+    # Skip when admin is in middle of a panel input
+    for state_mod, state_name in [
+        ("plugins.admin_verify", "AWAITING_INPUT"),
+        ("plugins.dump_manager", "ADMIN_DUMP_STATE"),
+        ("plugins.admin_fsub", "ADMIN_FSUB_STATE"),
+        ("plugins.admin_premium", "ADMIN_PREM_STATE"),
+        ("plugins.admin_caption", "AWAITING_CAPTION"),
+        ("plugins.admin_start_config", "AWAITING_START_MSG"),
+        ("plugins.admin_start_config", "AWAITING_START_PHOTO"),
+    ]:
+        try:
+            mod = __import__(state_mod, fromlist=[state_name])
+            state = getattr(mod, state_name, {})
+            if user_id in state:
+                return
+        except Exception:
+            pass
+
+    # Immediate feedback - stays until search finishes
     try:
-        from plugins.admin_verify import AWAITING_INPUT as V_AWAITING
-        if user_id in V_AWAITING:
-            return
-    except Exception:
-        pass
-    try:
-        from plugins.dump_manager import ADMIN_DUMP_STATE
-        if user_id in ADMIN_DUMP_STATE:
-            return
-    except Exception:
-        pass
-    try:
-        from plugins.admin_fsub import ADMIN_FSUB_STATE
-        if user_id in ADMIN_FSUB_STATE:
-            return
-    except Exception:
-        pass
-    try:
-        from plugins.admin_premium import ADMIN_PREM_STATE
-        if user_id in ADMIN_PREM_STATE:
-            return
-    except Exception:
-        pass
-    try:
-        from plugins.admin_caption import AWAITING_CAPTION
-        if user_id in AWAITING_CAPTION:
-            return
-    except Exception:
-        pass
+        status_msg = await message.reply_text(
+            f"🔎 <b>Searching:</b> <code>{content}</code>...",
+            parse_mode=enums.ParseMode.HTML
+        )
+    except Exception as e:
+        logger.error("pm_text status reply failed: %s", e)
+        status_msg = None
 
     # Optional reaction
     if EMOJI_MODE:
         try:
             await message.react(emoji=random.choice(REACTIONS), big=True)
         except Exception:
-            try:
-                await message.react(emoji="⚡️")
-            except Exception:
-                pass
+            pass
 
-    # Stats
     try:
         await mdb.update_top_messages(user_id, content)
     except Exception:
         pass
 
-    # Show searching status so we know handler is alive
-    status_msg = None
     try:
-        status_msg = await message.reply_text(
-            f"🔎 <b>Searching for:</b> <code>{content}</code>...",
-            parse_mode=enums.ParseMode.HTML
-        )
-    except Exception:
-        pass
-
-    try:
-        await auto_filter(bot, message)
-    except Exception as e:
-        logger.exception("Error executing auto_filter in pm_text: %s", e)
+        await asyncio.wait_for(auto_filter(bot, message), timeout=25)
+    except asyncio.TimeoutError:
+        logger.error("auto_filter timed out for: %s", content)
         try:
             await message.reply_text(
-                f"<b>⚠️ Search failed:</b> <code>{content}</code>\n\n<code>{str(e)[:150]}</code>",
+                f"⚠️ <b>Search timed out</b> for <code>{content}</code>\n"
+                f"Database slow / unreachable. Check MongoDB on Render.",
+                parse_mode=enums.ParseMode.HTML
+            )
+        except Exception:
+            pass
+    except Exception as e:
+        logger.exception("auto_filter error in pm_text: %s", e)
+        try:
+            await message.reply_text(
+                f"⚠️ <b>Search error:</b> <code>{content}</code>\n<code>{str(e)[:180]}</code>",
                 parse_mode=enums.ParseMode.HTML
             )
         except Exception:
