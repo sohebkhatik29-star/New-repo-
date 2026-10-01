@@ -75,16 +75,19 @@ async def give_filter(client, message):
         )
 
 
-@Client.on_message(filters.private & filters.text & filters.incoming & ~filters.regex(r"^[/\!.]") & ~filters.regex(r"(https?://)?(t\.me|telegram\.me|telegram\.dog)/"))
+@Client.on_message(filters.private & filters.text & filters.incoming)
 async def pm_text(bot, message):
     if not message or not message.from_user or not message.text:
         return
     
     user_id = message.from_user.id
-    content = message.text.strip()
-    user = message.from_user.first_name or "User"
+    content = (message.text or "").strip()
 
-    # 1. Admin state filters (in-memory only)
+    # Ignore commands
+    if content.startswith(("/", "!", ".")):
+        return
+
+    # Admin input states - skip search when admin is typing for a panel
     try:
         from plugins.admin_verify import AWAITING_INPUT as V_AWAITING
         if user_id in V_AWAITING:
@@ -116,11 +119,7 @@ async def pm_text(bot, message):
     except Exception:
         pass
 
-    # 2. Ignore commands or hashtags
-    if content.startswith(("/", "!", ".", "#")):
-        return
-
-    # 3. Optional Emoji Reaction
+    # Optional reaction
     if EMOJI_MODE:
         try:
             await message.react(emoji=random.choice(REACTIONS), big=True)
@@ -130,24 +129,39 @@ async def pm_text(bot, message):
             except Exception:
                 pass
 
-    # 4. Update top messages stats
+    # Stats
     try:
         await mdb.update_top_messages(user_id, content)
     except Exception:
         pass
 
-    # 5. Execute Auto Filter Search (always ON - no silent fail)
+    # Show searching status so we know handler is alive
+    status_msg = None
+    try:
+        status_msg = await message.reply_text(
+            f"🔎 <b>Searching for:</b> <code>{content}</code>...",
+            parse_mode=enums.ParseMode.HTML
+        )
+    except Exception:
+        pass
+
     try:
         await auto_filter(bot, message)
     except Exception as e:
         logger.exception("Error executing auto_filter in pm_text: %s", e)
         try:
             await message.reply_text(
-                f"<b>⚠️ Search error for:</b> <code>{content}</code>\n\nPlease try again.",
+                f"<b>⚠️ Search failed:</b> <code>{content}</code>\n\n<code>{str(e)[:150]}</code>",
                 parse_mode=enums.ParseMode.HTML
             )
         except Exception:
             pass
+    finally:
+        if status_msg:
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
 
 
 @Client.on_callback_query(filters.regex(r"^reffff"))
