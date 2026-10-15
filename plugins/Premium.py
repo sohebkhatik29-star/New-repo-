@@ -11,8 +11,35 @@ from pyrogram.errors.exceptions.bad_request_400 import MessageTooLong
 from pyrogram.types import *
 
 
-@Client.on_message(filters.command("remove_premium") & filters.user(ADMINS))
+def _is_admin(user_id: int) -> bool:
+    """Check admin against live ADMINS list (includes custom admins synced at runtime)."""
+    try:
+        uid = int(user_id)
+        return uid in ADMINS or str(uid) in [str(a) for a in ADMINS]
+    except Exception:
+        return False
+
+
+async def _require_admin(message) -> bool:
+    if not message.from_user or not _is_admin(message.from_user.id):
+        try:
+            await message.reply_text(
+                "❌ <b>Access Denied</b>\n\n"
+                "You are not an admin.\n"
+                f"Your ID: <code>{message.from_user.id if message.from_user else 'N/A'}</code>\n\n"
+                "Add this ID to <code>ADMINS</code> env on Render, or add via Manage Admins panel.",
+                parse_mode=enums.ParseMode.HTML
+            )
+        except Exception:
+            pass
+        return False
+    return True
+
+
+@Client.on_message(filters.command("remove_premium") & filters.private)
 async def remove_premium(client, message):
+    if not await _require_admin(message):
+        return
     if len(message.command) == 2:
         user_id = int(message.command[1])
         user = await client.get_users(user_id)
@@ -77,8 +104,10 @@ async def myplan(client, message):
     except Exception as e:
         print(e)
 
-@Client.on_message(filters.command("get_premium") & filters.user(ADMINS))
+@Client.on_message(filters.command("get_premium") & filters.private)
 async def get_premium(client, message):
+    if not await _require_admin(message):
+        return
     if len(message.command) == 2:
         user_id = int(message.command[1])
         user = await client.get_users(user_id)
@@ -99,7 +128,7 @@ async def get_premium(client, message):
     else:
         await message.reply_text("ᴜꜱᴀɢᴇ : /get_premium user_id")
 
-@Client.on_message(filters.command("add_premium") & filters.user(ADMINS))
+@Client.on_message(filters.command("add_premium") & filters.private)
 async def give_premium_cmd_handler(client, message):
     """
     Usage:
@@ -112,6 +141,8 @@ async def give_premium_cmd_handler(client, message):
       /add_premium 123456789 30 day
       /add_premium 123456789 1month
     """
+    if not await _require_admin(message):
+        return
     try:
         args = message.command[1:]  # everything after /add_premium
         user_id = None
@@ -233,8 +264,10 @@ async def give_premium_cmd_handler(client, message):
             parse_mode=enums.ParseMode.HTML
         )
 
-@Client.on_message(filters.command("premium_users") & filters.user(ADMINS))
+@Client.on_message(filters.command("premium_users") & filters.private)
 async def premium_user(client, message):
+    if not await _require_admin(message):
+        return
     aa = await message.reply_text("<i>ꜰᴇᴛᴄʜɪɴɢ...</i>")
     new = f" ᴘʀᴇᴍɪᴜᴍ ᴜꜱᴇʀꜱ ʟɪꜱᴛ :\n\n"
     user_count = 1
