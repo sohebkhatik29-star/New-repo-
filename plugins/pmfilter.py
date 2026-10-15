@@ -105,7 +105,7 @@ async def pm_text(bot, message):
         except Exception:
             pass
 
-    # Immediate feedback - stays until search finishes
+    status_msg = None
     try:
         status_msg = await message.reply_text(
             f"🔎 <b>Searching:</b> <code>{content}</code>...",
@@ -113,9 +113,7 @@ async def pm_text(bot, message):
         )
     except Exception as e:
         logger.error("pm_text status reply failed: %s", e)
-        status_msg = None
 
-    # Optional reaction
     if EMOJI_MODE:
         try:
             await message.react(emoji=random.choice(REACTIONS), big=True)
@@ -128,17 +126,37 @@ async def pm_text(bot, message):
         pass
 
     try:
-        await asyncio.wait_for(auto_filter(bot, message), timeout=25)
+        await asyncio.wait_for(auto_filter(bot, message), timeout=30)
     except asyncio.TimeoutError:
         logger.error("auto_filter timed out for: %s", content)
+        # Fallback: simple direct search
         try:
+            search = content.lower().strip()
+            files, offset, total = await get_search_results(message.chat.id, search, offset=0, filter=True)
+            if files:
+                btn = [[
+                    InlineKeyboardButton(
+                        text=f"🔗 {get_size(f.file_size)} ≽ {clean_filename(f.file_name)[:50]}",
+                        callback_data=f"file#{f.file_id}"
+                    )
+                ] for f in files[:10]]
+                await message.reply_text(
+                    f"<b>🏷 Title:</b> <code>{search}</code>\n"
+                    f"<b>📁 Files:</b> {total}\n\n"
+                    f"<u>Your files are ready — tap to get:</u>",
+                    reply_markup=InlineKeyboardMarkup(btn),
+                    parse_mode=enums.ParseMode.HTML
+                )
+            else:
+                await message.reply_text(
+                    f"❌ No results for <code>{content}</code>\nTry another name.",
+                    parse_mode=enums.ParseMode.HTML
+                )
+        except Exception as e2:
             await message.reply_text(
-                f"⚠️ <b>Search timed out</b> for <code>{content}</code>\n"
-                f"Database slow / unreachable. Check MongoDB on Render.",
+                f"⚠️ Search timed out / failed for <code>{content}</code>\n<code>{str(e2)[:120]}</code>",
                 parse_mode=enums.ParseMode.HTML
             )
-        except Exception:
-            pass
     except Exception as e:
         logger.exception("auto_filter error in pm_text: %s", e)
         try:
@@ -931,66 +949,66 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 await query.answer("Tʜᴀᴛ's ɴᴏᴛ ғᴏʀ ʏᴏᴜ!!", show_alert=True)
 
     if query.data.startswith("file"):
-        ident, file_id = query.data.split("#")
+        ident, file_id = query.data.split("#", 1)
         user = query.message.reply_to_message.from_user.id if query.message.reply_to_message else query.from_user.id
         if int(user) != 0 and query.from_user.id != int(user):
             return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
-        
-        # If already in private chat, send file directly (fixes click not working / deep-link issues)
-        if query.message.chat.type == enums.ChatType.PRIVATE:
-            try:
-                files_ = await get_file_details(file_id)
-                if not files_:
-                    return await query.answer("ɴᴏ ꜱᴜᴄʜ ꜰɪʟᴇ ᴇxɪꜱᴛꜱ !", show_alert=True)
-                files = files_[0]
-                title = clean_filename(files.file_name)
-                size = get_size(files.file_size)
-                f_caption = files.caption
-                settings = await get_settings(query.message.chat.id)
-                DREAMX_CAPTION = settings.get('caption', CUSTOM_FILE_CAPTION) if settings else CUSTOM_FILE_CAPTION
-                if DREAMX_CAPTION:
-                    try:
-                        f_caption = DREAMX_CAPTION.format(
-                            file_name='' if title is None else title,
-                            file_size='' if size is None else size,
-                            file_caption='' if f_caption is None else f_caption
-                        )
-                    except Exception:
-                        f_caption = title or files.file_name
-                if f_caption is None:
-                    f_caption = title or files.file_name
-                cover = getattr(files, 'cover', None)
-                # Simple buttons to avoid circular import with commands.py
-                btn = [[InlineKeyboardButton('📌 ᴊᴏɪɴ ᴜᴘᴅᴀᴛᴇꜱ ᴄʜᴀɴɴᴇʟ 📌', url=UPDATE_CHNL_LNK)]]
-                protect = settings.get('file_secure', PROTECT_CONTENT) if settings else PROTECT_CONTENT
-                await query.answer()
-                send_kwargs = {
-                    "chat_id": query.from_user.id,
-                    "file_id": file_id,
-                    "caption": f_caption,
-                    "protect_content": protect,
-                    "reply_markup": InlineKeyboardMarkup(btn)
-                }
-                if cover:
-                    send_kwargs["cover"] = cover
-                msg = await client.send_cached_media(**send_kwargs)
-                # Optional auto-delete
+
+        # Always try to send file directly to user's PM (works for group + private)
+        try:
+            files_ = await get_file_details(file_id)
+            if not files_:
+                return await query.answer("ɴᴏ ꜱᴜᴄʜ ꜰɪʟᴇ ᴇxɪꜱᴛꜱ !", show_alert=True)
+            files = files_[0]
+            title = clean_filename(files.file_name)
+            size = get_size(files.file_size)
+            f_caption = files.caption
+            settings = await get_settings(query.message.chat.id)
+            DREAMX_CAPTION = settings.get('caption', CUSTOM_FILE_CAPTION) if settings else CUSTOM_FILE_CAPTION
+            if DREAMX_CAPTION:
                 try:
-                    if settings and settings.get('auto_delete'):
-                        k = await msg.reply(script.DEL_MSG.format(get_time(DELETE_TIME)), quote=True, parse_mode=enums.ParseMode.HTML)
-                        await asyncio.sleep(DELETE_TIME)
-                        await msg.delete()
-                        await k.edit_text("<b>ʏᴏᴜʀ ᴠɪᴅᴇᴏ / ꜰɪʟᴇ ɪꜱ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ !!</b>")
+                    f_caption = DREAMX_CAPTION.format(
+                        file_name='' if title is None else title,
+                        file_size='' if size is None else size,
+                        file_caption='' if f_caption is None else f_caption
+                    )
                 except Exception:
-                    pass
-                return
-            except Exception as e:
-                logger.exception(e)
-                await query.answer("Error sending file. Try again.", show_alert=True)
-                return
-        
-        # For groups: use deep link to open bot PM
-        await query.answer(url=f"https://t.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file_id}")
+                    f_caption = title or files.file_name
+            if f_caption is None:
+                f_caption = title or files.file_name
+            cover = getattr(files, 'cover', None)
+            btn = [[InlineKeyboardButton('📌 ᴊᴏɪɴ ᴜᴘᴅᴀᴛᴇꜱ ᴄʜᴀɴɴᴇʟ 📌', url=UPDATE_CHNL_LNK)]]
+            protect = settings.get('file_secure', PROTECT_CONTENT) if settings else PROTECT_CONTENT
+            send_kwargs = {
+                "chat_id": query.from_user.id,
+                "file_id": file_id,
+                "caption": f_caption,
+                "protect_content": protect,
+                "reply_markup": InlineKeyboardMarkup(btn)
+            }
+            if cover:
+                send_kwargs["cover"] = cover
+            await client.send_cached_media(**send_kwargs)
+            await query.answer("✅ File sent in bot PM!", show_alert=False)
+            return
+        except (UserIsBlocked, PeerIdInvalid):
+            # User never started bot — open deep link
+            bot_uname = temp.U_NAME or (await client.get_me()).username
+            await query.answer(
+                url=f"https://t.me/{bot_uname}?start=file_{query.message.chat.id}_{file_id}"
+            )
+            return
+        except Exception as e:
+            logger.exception("file# send failed: %s", e)
+            # Fallback deep link
+            try:
+                bot_uname = temp.U_NAME or (await client.get_me()).username
+                await query.answer(
+                    url=f"https://t.me/{bot_uname}?start=file_{query.message.chat.id}_{file_id}"
+                )
+            except Exception:
+                await query.answer("Error sending file. Start the bot first then try again.", show_alert=True)
+            return
 
     elif query.data.startswith("sendfiles"):
         clicked = query.from_user.id
