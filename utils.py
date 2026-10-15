@@ -988,29 +988,43 @@ def generate_season_variations(search_raw: str, season_number: int):
 
 
 async def get_seconds(time_string):
-    def extract_value_and_unit(ts):
-        value = ""
-        unit = ""
-        index = 0
-        while index < len(ts) and ts[index].isdigit():
-            value += ts[index]
-            index += 1
-        unit = ts[index:].lstrip()
-        if value:
-            value = int(value)
-        return value, unit
-    value, unit = extract_value_and_unit(time_string)
-    if unit == 's':
+    """Parse time strings like '1 day', '2 months', '30day', '1hour' into seconds."""
+    if not time_string:
+        return 0
+    ts = str(time_string).strip().lower()
+    # Normalize plurals and common aliases
+    ts = ts.replace("seconds", "s").replace("second", "s")
+    ts = ts.replace("minutes", "min").replace("minute", "min").replace("mins", "min")
+    ts = ts.replace("hours", "hour").replace("hrs", "hour").replace("hr", "hour")
+    ts = ts.replace("days", "day")
+    ts = ts.replace("months", "month")
+    ts = ts.replace("years", "year")
+    # Insert space if missing: 1day -> 1 day, 2month -> 2 month
+    import re as _re
+    ts = _re.sub(r'^(\d+)([a-z]+)$', r'\1 \2', ts)
+
+    value = ""
+    unit = ""
+    index = 0
+    while index < len(ts) and ts[index].isdigit():
+        value += ts[index]
+        index += 1
+    unit = ts[index:].lstrip()
+    if not value:
+        return 0
+    value = int(value)
+
+    if unit in ('s', 'sec'):
         return value
-    elif unit == 'min':
+    elif unit in ('min', 'm'):
         return value * 60
-    elif unit == 'hour':
+    elif unit in ('hour', 'h'):
         return value * 3600
-    elif unit == 'day':
+    elif unit in ('day', 'd'):
         return value * 86400
-    elif unit == 'month':
+    elif unit in ('month', 'mo'):
         return value * 86400 * 30
-    elif unit == 'year':
+    elif unit in ('year', 'y'):
         return value * 86400 * 365
     else:
         return 0

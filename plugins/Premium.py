@@ -6,7 +6,7 @@ from info import *
 from utils import get_seconds, temp
 from database.users_chats_db import db 
 import asyncio
-from pyrogram import Client, filters 
+from pyrogram import Client, filters, enums
 from pyrogram.errors.exceptions.bad_request_400 import MessageTooLong
 from pyrogram.types import *
 
@@ -101,38 +101,137 @@ async def get_premium(client, message):
 
 @Client.on_message(filters.command("add_premium") & filters.user(ADMINS))
 async def give_premium_cmd_handler(client, message):
-    if len(message.command) == 4:
-        time_zone = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
-        current_time = time_zone.strftime("%d-%m-%Y\n⏱️ ᴊᴏɪɴɪɴɢ ᴛɪᴍᴇ : %I:%M:%S %p") 
-        user_id = int(message.command[1])  
-        user = await client.get_users(user_id)
-        time = message.command[2]+" "+message.command[3]
-        seconds = await get_seconds(time)
-        if seconds > 0:
-            expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-            user_data = {"id": user_id, "expiry_time": expiry_time}  
-            await db.update_user(user_data) 
-            data = await db.get_user(user_id)
-            expiry = data.get("expiry_time")   
-            expiry_str_in_ist = expiry.astimezone(pytz.timezone("Asia/Kolkata")).strftime("%d-%m-%Y\n⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : %I:%M:%S %p")         
-            await message.reply_text(f"ᴘʀᴇᴍɪᴜᴍ ᴀᴅᴅᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ✅\n\n👤 ᴜꜱᴇʀ : {user.mention}\n⚡ ᴜꜱᴇʀ ɪᴅ : <code>{user_id}</code>\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : <code>{time}</code>\n\n⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_str_in_ist}", disable_web_page_preview=True)
-            await client.send_message(
-                chat_id=user_id,
-                text=f"👋 ʜᴇʏ {user.mention},\nᴛʜᴀɴᴋ ʏᴏᴜ ꜰᴏʀ ᴘᴜʀᴄʜᴀꜱɪɴɢ ᴘʀᴇᴍɪᴜᴍ.\nᴇɴᴊᴏʏ !! ✨🎉\n\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : <code>{time}</code>\n⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_str_in_ist}", disable_web_page_preview=True              
-            )    
-            await client.send_message(PREMIUM_LOGS, text=f"#Added_Premium\n\n👤 ᴜꜱᴇʀ : {user.mention}\n⚡ ᴜꜱᴇʀ ɪᴅ : <code>{user_id}</code>\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : <code>{time}</code>\n\n⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_str_in_ist}", disable_web_page_preview=True)
-                    
+    """
+    Usage:
+      /add_premium <user_id> <number> <unit>
+      /add_premium <user_id> <number><unit>
+      Reply to a user: /add_premium <number> <unit>
+
+    Examples:
+      /add_premium 123456789 1 month
+      /add_premium 123456789 30 day
+      /add_premium 123456789 1month
+    """
+    try:
+        args = message.command[1:]  # everything after /add_premium
+        user_id = None
+        time_str = None
+
+        # Case 1: reply to a user message
+        if message.reply_to_message and message.reply_to_message.from_user:
+            user_id = message.reply_to_message.from_user.id
+            time_str = " ".join(args).strip() if args else ""
+        # Case 2: /add_premium USER_ID TIME...
+        elif args:
+            try:
+                user_id = int(args[0])
+            except ValueError:
+                await message.reply_text(
+                    "❌ <b>Invalid user_id</b>\n\n"
+                    "📌 Usage: <code>/add_premium user_id 1 month</code>\n"
+                    "📅 Example: <code>/add_premium 123456789 1 month</code>",
+                    parse_mode=enums.ParseMode.HTML
+                )
+                return
+            time_str = " ".join(args[1:]).strip() if len(args) > 1 else ""
         else:
             await message.reply_text(
-                "❌ ɪɴᴠᴀʟɪᴅ ᴛɪᴍᴇ ꜰᴏʀᴍᴀᴛ ❗\n"
-                "🕒 ᴘʟᴇᴀsᴇ ᴜsᴇ: <code>1 day</code>, <code>1 hour</code>, <code>1 min</code>, <code>1 month</code>, or <code>1 year</code>"
+                "📌 <b>Usage:</b> <code>/add_premium user_id time</code>\n"
+                "📅 <b>Examples:</b>\n"
+                "• <code>/add_premium 123456789 1 month</code>\n"
+                "• <code>/add_premium 123456789 30 day</code>\n"
+                "• <code>/add_premium 123456789 1year</code>\n"
+                "• Reply to user: <code>/add_premium 1 month</code>\n\n"
+                "🧭 Units: <code>min</code>, <code>hour</code>, <code>day</code>, <code>month</code>, <code>year</code>",
+                parse_mode=enums.ParseMode.HTML
             )
-    else:
+            return
+
+        if not time_str:
+            await message.reply_text(
+                "❌ Time missing!\n\n"
+                "Example: <code>/add_premium {} 1 month</code>".format(user_id),
+                parse_mode=enums.ParseMode.HTML
+            )
+            return
+
+        seconds = await get_seconds(time_str)
+        if seconds <= 0:
+            await message.reply_text(
+                "❌ <b>Invalid time format</b>\n\n"
+                "Use: <code>1 day</code>, <code>1 hour</code>, <code>1 min</code>, "
+                "<code>1 month</code>, <code>1 year</code>\n"
+                f"You sent: <code>{time_str}</code>",
+                parse_mode=enums.ParseMode.HTML
+            )
+            return
+
+        try:
+            user = await client.get_users(user_id)
+        except Exception:
+            await message.reply_text(
+                f"❌ User not found: <code>{user_id}</code>\n"
+                "User must have started the bot at least once.",
+                parse_mode=enums.ParseMode.HTML
+            )
+            return
+
+        time_zone = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
+        current_time = time_zone.strftime("%d-%m-%Y\n⏱️ Joining time : %I:%M:%S %p")
+        expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+        user_data = {"id": user_id, "expiry_time": expiry_time}
+        await db.update_user(user_data)
+
+        data = await db.get_user(user_id)
+        expiry = data.get("expiry_time")
+        expiry_str_in_ist = expiry.astimezone(pytz.timezone("Asia/Kolkata")).strftime(
+            "%d-%m-%Y\n⏱️ Expiry time : %I:%M:%S %p"
+        )
+
+        success_text = (
+            f"✅ <b>Premium Added Successfully</b>\n\n"
+            f"👤 User : {user.mention}\n"
+            f"⚡ User ID : <code>{user_id}</code>\n"
+            f"⏰ Access : <code>{time_str}</code>\n\n"
+            f"⏳ Joining : {current_time}\n"
+            f"⌛️ Expiry : {expiry_str_in_ist}"
+        )
+        await message.reply_text(success_text, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
+
+        # Notify user (ignore if blocked)
+        try:
+            await client.send_message(
+                chat_id=user_id,
+                text=(
+                    f"👋 Hey {user.mention},\n"
+                    f"Thank you for purchasing Premium. Enjoy! ✨🎉\n\n"
+                    f"⏰ Access : <code>{time_str}</code>\n"
+                    f"⏳ Joining : {current_time}\n"
+                    f"⌛️ Expiry : {expiry_str_in_ist}"
+                ),
+                parse_mode=enums.ParseMode.HTML,
+                disable_web_page_preview=True
+            )
+        except Exception:
+            pass
+
+        # Premium logs (ignore if channel invalid)
+        try:
+            if PREMIUM_LOGS and PREMIUM_LOGS != -100:
+                await client.send_message(
+                    PREMIUM_LOGS,
+                    text=f"#Added_Premium\n\n{success_text}",
+                    parse_mode=enums.ParseMode.HTML,
+                    disable_web_page_preview=True
+                )
+        except Exception:
+            pass
+
+    except Exception as e:
         await message.reply_text(
-            "📌 ᴜsᴀɢᴇ: <code>/add_premium user_id time</code>\n"
-            "📅 ᴇxᴀᴍᴘʟᴇ: <code>/add_premium 123456 1 month</code>\n"
-            "🧭 ᴀᴄᴄᴇᴘᴛᴇᴅ ꜰᴏʀᴍᴀᴛs: <code>1 day</code>, <code>1 hour</code>, <code>1 min</code>, <code>1 month</code>, <code>1 year</code>"
-            )
+            f"⚠️ Error while adding premium:\n<code>{str(e)[:200]}</code>",
+            parse_mode=enums.ParseMode.HTML
+        )
 
 @Client.on_message(filters.command("premium_users") & filters.user(ADMINS))
 async def premium_user(client, message):
